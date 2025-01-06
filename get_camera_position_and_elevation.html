@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Get Camera Position and Elevation</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <style>
+        #map {
+            height: 600px;
+            width: 100%;
+        }
+        .controls {
+            margin: 10px;
+        }
+        .section {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Photo Geotag Mapper</h1>
+    <div class="section">
+        <h2>上传GeoTIFF文件</h2>
+        <input type="file" id="tiffFileInput" accept=".tiff,.tif">
+    </div>
+    <div class="section">
+        <h2>相机位置</h2>
+        <input type="file" id="cameraFileInput" multiple accept="image/*">
+        <button id="exportCameraButton">导出相机位置</button>
+    </div>
+    <div class="section">
+        <h2>特征点</h2>
+        <input type="file" id="featureFileInput" accept=".csv">
+        <button id="exportFeatureButton">导出特征点</button>
+    </div>
+    <div class="controls">
+        <button id="increaseButton">+</button>
+        <button id="decreaseButton">-</button>
+    </div>
+    <div id="map"></div>
+
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/geotiff"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var map = L.map('map').setView([0, 0], 2);
+
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenStreetMap contributors'
+            }).addTo(map);
+
+            var cameraCoordinates = [];
+            var featureCoordinates = [];
+            var generatedPoints = [];
+            var pointsPerGridSide = 10;
+            var tiffImage, tiffData, width, height;
+
+            // 添加绘图控件
+            var drawnItems = new L.FeatureGroup();
+            map.addLayer(drawnItems);
+
+            var drawControl = new L.Control.Draw({
+                edit: {
+                    featureGroup: drawnItems
+                },
+                draw: {
+                    polygon: false,
+                    polyline: false,
+                    circle: false,
+                    marker: false,
+                    circlemarker: false,
+                    rectangle: {
+                        shapeOptions: {
+                            color: '#ff7800',
+                            weight: 1
+                        }
+                    }
+                }
+            });
+            map.addControl(drawControl);
+
+            // 监听文件输入的变化（上传GeoTIFF文件）
+            document.getElementById('tiffFileInput').addEventListener('change', function(event) {
+                var file = event.target.files[0];
+                var reader = new FileReader();
+                reader.onload = async function(e) {
+                    var arrayBuffer = e.target.result;
+                    try {
+                        var tiff = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+                        tiffImage = await tiff.getImage();
+                        tiffData = await tiffImage.readRasters();
+                        width = tiffImage.getWidth();
+                        height = tiffImage.getHeight();
+                        console.log('GeoTIFF file parsed successfully');
+                        console.log('Image width:', width);
+                        console.log('Image height:', height);
+                        console.log('Raster data:', tiffData);
+                    } catch (error) {
+                        console.error('Error parsing GeoTIFF file:', error);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            });
+
+            // 监听文件输入的变化（相机位置）
+            document.getElementById('cameraFileInput').addEventListener('change', function(event) {
+                cameraCoordinates = [];
+                var files = event.target.files;
+                for (var i = 0; i < files.length; i++) {
+                    var file = files[i];
+                    var reader = new FileReader();
+                    reader.onload = function(e) {
+                        var img = new Image();
+                        img.onload = function() {
+                            EXIF.getData(img, function() {
+                                var lat = EXIF.getTag(this, "GPSLatitude");
+                                var lon = EXIF.getTag(this, "GPSLongitude");
+                                var latRef = EXIF.getTag(this, "GPSLatitudeRef");
+                                var lonRef = EXIF.getTag(this, "GPSLongitudeRef");
+
+                                if (lat && lon && latRef && lonRef) {
+                                    var latitude = (lat[0] + lat[1] / 60 + lat[2] / 3600) * (latRef === "N" ? 1 : -1);
+                                    var longitude = (lon[0] + lon[1] / 60 + lon[2] / 3600) * (lonRef === "E" ? 1 : -1);
+
+                                    L.marker([latitude, longitude]).addTo(map)
+                                        .bindPopup("Photo Location")
+                                        .openPopup();
+
+                                    cameraCoordinates.push({ latitude: latitude, longitude: longitude, filename: file.name });
+                                }
+                            });
+                        };
+                        img.src = e.target.result;
+                    };
+                    reader.readAsDataURL(file);
+                }
+            });
+
+            // 监听文件输入的变化（特征点）
+            document.getElementById('featureFileInput').addEventListener('change', function(event) {
+                featureCoordinates = [];
+                var file = event.target.files[0];
+                var reader = new FileReader();
+                reader.onload = function(e) {
+                    var csv = e.target.result;
+                    var lines = csv.split('\n');
+                    lines.forEach(function(line) {
+                        var [latitude, longitude] = line.split(',');
+                        if (latitude && longitude) {
+                            featureCoordinates.push({ latitude: parseFloat(latitude), longitude: parseFloat(longitude) });
+                        }
+                    });
+                };
+                reader.readAsText(file);
+            });
+
+            // 监听绘制的完成事件
+            map.on(L.Draw.Event.CREATED, function(event) {
+                var layer = event.layer;
+                drawnItems.addLayer(layer);
+
+                var bounds = layer.getBounds();
+                var area = L.GeometryUtil.geodesicArea(layer.getLatLngs()[0]);
+                var areaText = (area / 1000000).toFixed(2) + ' km²';
+
+                var generatePoints = function () {
+                    var southWest = bounds.getSouthWest();
+                    var northEast = bounds.getNorthEast();
+
+                    generatedPoints = [];
+                    drawnItems.clearLayers();
+
+                    var pointId = 1;
+                    var gridId = 1;  // 初始化网格编号
+                    var latStep = (northEast.lat - southWest.lat) / pointsPerGridSide;
+                    var lngStep = (northEast.lng - southWest.lng) / pointsPerGridSide;
+
+                    for (var i = 0; i < pointsPerGridSide; i++) {
+                        for (var j = 0; j < pointsPerGridSide; j++) {
+                            var gridLat = southWest.lat + i * latStep;
+                            var gridLng = southWest.lng + j * lngStep;
+                            var gridCode = gridId++;  // 使用数字编号
+
+                            // 在每个网格内生成多个点
+                            for (var m = 0; m < 3; m++) {
+                                for (var n = 0; n < 3; n++) {
+                                    var lat = gridLat + (m + 0.5) * latStep / 3;
+                                    var lon = gridLng + (n + 0.5) * lngStep / 3;
+
+                                    generatedPoints.push({
+                                        pointid: pointId++,
+                                        grid_code: gridCode,
+                                        latitude: lat,
+                                        longitude: lon
+                                    });
+
+                                    L.circleMarker([lat, lon], { radius: 3, color: 'red' }).addTo(drawnItems);
+                                }
+                            }
+                        }
+                    }
+
+                    var totalPoints = generatedPoints.length;
+                    var tooltipText = `${areaText} | Points: ${totalPoints}`;
+                    layer.bindTooltip(tooltipText, { permanent: true, direction: 'top', offset: L.point(0, -10) }).openTooltip();
+
+                    drawnItems.addLayer(layer);
+                };
+
+                generatePoints();
+
+                document.getElementById('increaseButton').addEventListener('click', function() {
+                    pointsPerGridSide = Math.min(pointsPerGridSide + 1, 100);
+                    generatePoints();
+                });
+
+                document.getElementById('decreaseButton').addEventListener('click', function() {
+                    pointsPerGridSide = Math.max(pointsPerGridSide - 1, 1);
+                    generatePoints();
+                });
+            });
+
+            // 从GeoTIFF数据中获取海拔信息
+            function getElevationFromTiff(lat, lon) {
+                if (!tiffData || !tiffImage) {
+                    console.error('No tiff data or image');
+                    return 'N/A';
+                }
+
+                var tiePoint = tiffImage.getTiePoints()[0];
+                var pixelWidth = tiffImage.getResolution()[0];
+                var pixelHeight = -tiffImage.getResolution()[1];
+                var originX = tiePoint.x;
+                var originY = tiePoint.y;
+
+                // 计算像素坐标
+                var x = Math.floor((lon - originX) / pixelWidth);
+                var y = Math.floor((originY - lat) / Math.abs(pixelHeight));
+
+                console.log('Lat:', lat, 'Lon:', lon);
+                console.log('X:', x, 'Y:', y);
+
+                if (x < 0 || x >= width || y < 0 || y >= height) {
+                    console.error('Coordinates out of bounds');
+                    return 'N/A';
+                }
+
+                var index = y * width + x;
+                return tiffData[0][index];
+            }
+
+            // 根据坐标找到所属的网格编号
+            function findGridCode(latitude, longitude, southWest, northEast, pointsPerGridSide) {
+                var latStep = (northEast.lat - southWest.lat) / pointsPerGridSide;
+                var lngStep = (northEast.lng - southWest.lng) / pointsPerGridSide;
+
+                var i = Math.floor((latitude - southWest.lat) / latStep);
+                var j = Math.floor((longitude - southWest.lng) / lngStep);
+
+                return i * pointsPerGridSide + j + 1; // 网格编号从1开始
+            }
+
+            // 导出相机位置和生成点CSV的功能
+            document.getElementById('exportCameraButton').addEventListener('click', function() {
+                if (cameraCoordinates.length === 0 && generatedPoints.length === 0) {
+                    alert('No coordinates to export.');
+                    return;
+                }
+
+                // 获取绘制的矩形区域的边界
+                var bounds = drawnItems.getLayers()[0].getBounds();
+                var southWest = bounds.getSouthWest();
+                var northEast = bounds.getNorthEast();
+
+                for (let i = 0; i < cameraCoordinates.length; i++) {
+                    cameraCoordinates[i].elevation = getElevationFromTiff(cameraCoordinates[i].latitude, cameraCoordinates[i].longitude);
+                    cameraCoordinates[i].grid_code = findGridCode(cameraCoordinates[i].latitude, cameraCoordinates[i].longitude, southWest, northEast, pointsPerGridSide);
+                }
+
+                for (let i = 0; i < generatedPoints.length; i++) {
+                    generatedPoints[i].elevation = getElevationFromTiff(generatedPoints[i].latitude, generatedPoints[i].longitude);
+                }
+
+                var csvContent = "data:text/csv;charset=utf-8,pointid,grid_code,longitude,latitude,elevation\n";
+
+                generatedPoints.forEach(function(point) {
+                    csvContent += `${point.pointid},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
+                });
+
+                cameraCoordinates.forEach(function(point, index) {
+                    csvContent += `${generatedPoints.length + index + 1},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
+                });
+
+                var encodedUri = encodeURI(csvContent);
+                var link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "coordinates.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+
+            // 导出特征点CSV的功能
+            document.getElementById('exportFeatureButton').addEventListener('click', function() {
+                if (featureCoordinates.length === 0) {
+                    alert('No coordinates to export.');
+                    return;
+                }
+
+                for (let i = 0; i < featureCoordinates.length; i++) {
+                    featureCoordinates[i].elevation = getElevationFromTiff(featureCoordinates[i].latitude, featureCoordinates[i].longitude);
+                }
+
+                var csvContent = "data:text/csv;charset=utf-8,pointid,grid_code,longitude,latitude,elevation\n";
+                var pointId = 1;
+                featureCoordinates.forEach(function(point) {
+                    csvContent += `${pointId++},Feature Point,${point.longitude},${point.latitude},${point.elevation}\n`;
+                });
+
+                var encodedUri = encodeURI(csvContent);
+                var link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "feature_coordinates.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            });
+        });
+    </script>
+</body>
+</html>
