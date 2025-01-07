@@ -7,37 +7,122 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
     <style>
-        #map {
-            height: 600px;
-            width: 100%;
+        body {
+            display: flex;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
         }
-        .controls {
+        .sidebar {
+            width: 375px; /* 增加工具栏宽度 */
+            background-color: #f0f0f0;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            border-radius: 10px;
             margin: 10px;
         }
         .section {
             margin-bottom: 20px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        .section h2 {
+            margin: 0;
+            padding: 0;
+            font-size: 16px;
+        }
+        /* 统一“选择文件”按钮和其他按钮的样式 */
+        .section input[type="file"],
+        .section button {
+            width: calc(100% - 20px); /* 调整按钮宽度 */
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background-color: #e0e0e0;
+            cursor: pointer;
+            text-align: center;
+        }
+        /* 清除文件选择按钮下的灰色底框 */
+        .section input[type="file"] {
+            background-color: transparent; /* 去掉默认背景 */
+        }
+        /* 统一悬停效果 */
+        .section button:hover,
+        .section input[type="file"]:hover {
+            background-color: #d0d0d0;
+        }
+        .controls {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .controls button {
+            width: 50px;
+            height: 50px;
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+            padding: 0;
+            border-radius: 50%;
+            border: 1px solid #ccc;
+            background-color: #e0e0e0;
+            cursor: pointer;
+        }
+        .controls button:hover {
+            background-color: #d0d0d0;
+        }
+        .info {
+            font-size: 12px;
+            color: #555;
+            margin-top: 10px;
+            text-align: center;
+        }
+        #map {
+            flex-grow: 1;
+            height: 100%;
+            width: 100%;
+            margin: 10px;
+            border-radius: 10px;
+        }
+        .leaflet-control-container {
+            text-align: right; /* 将绘图控件放在地图的右上角 */
         }
     </style>
 </head>
 <body>
-    <h1>Photo Geotag Mapper</h1>
-    <div class="section">
-        <h2>上传GeoTIFF文件</h2>
-        <input type="file" id="tiffFileInput" accept=".tiff,.tif">
-    </div>
-    <div class="section">
-        <h2>相机位置</h2>
-        <input type="file" id="cameraFileInput" multiple accept="image/*">
-        <button id="exportCameraButton">导出相机位置</button>
-    </div>
-    <div class="section">
-        <h2>特征点</h2>
-        <input type="file" id="featureFileInput" accept=".csv">
-        <button id="exportFeatureButton">导出特征点</button>
-    </div>
-    <div class="controls">
-        <button id="increaseButton">+</button>
-        <button id="decreaseButton">-</button>
+    <div class="sidebar">
+        <div class="section">
+            <h2>上传DEM数据</h2>
+            <input type="file" id="tiffFileInput" accept=".tiff,.tif">
+        </div>
+        <div class="section">
+            <h2>相机位置</h2>
+            <input type="file" id="cameraFileInput" multiple accept="image/*">
+            <button id="exportCameraButton">导出相机位置</button>
+            <div class="info" id="cameraInfo"></div>
+        </div>
+        <div class="section">
+            <h2>特征点</h2>
+            <input type="file" id="featureFileInput" accept=".csv">
+            <button id="exportFeatureButton">导出特征点</button>
+            <div class="info" id="featureInfo"></div>
+        </div>
+        <div class="controls">
+            <button id="increaseButton">+</button>
+            <span class="info">增加潜在相机位置</span>
+            <button id="decreaseButton">-</button>
+            <span class="info">减少潜在相机位置</span>
+        </div>
     </div>
     <div id="map"></div>
 
@@ -83,7 +168,7 @@
             });
             map.addControl(drawControl);
 
-            // 监听文件输入的变化（上传GeoTIFF文件）
+            // 监听文件输入的变化（上传DEM数据）
             document.getElementById('tiffFileInput').addEventListener('change', function(event) {
                 var file = event.target.files[0];
                 var reader = new FileReader();
@@ -110,6 +195,7 @@
             document.getElementById('cameraFileInput').addEventListener('change', function(event) {
                 cameraCoordinates = [];
                 var files = event.target.files;
+                var validCoordinates = 0;
                 for (var i = 0; i < files.length; i++) {
                     var file = files[i];
                     var reader = new FileReader();
@@ -131,7 +217,9 @@
                                         .openPopup();
 
                                     cameraCoordinates.push({ latitude: latitude, longitude: longitude, filename: file.name });
+                                    validCoordinates++;
                                 }
+                                document.getElementById('cameraInfo').innerText = `上传了 ${files.length} 张照片，提取了 ${validCoordinates} 个坐标点`;
                             });
                         };
                         img.src = e.target.result;
@@ -148,15 +236,12 @@
                 reader.onload = function(e) {
                     var csv = e.target.result;
                     var lines = csv.split('\n');
+                    var validFeatures = 0;
                     lines.forEach(function(line, index) {
                         if (index === 0) {
-                            // 跳过标题行
-                            console.log(`Skipping header line: ${line}`);
                             return;
                         }
                         if (line.trim() === '') {
-                            // 跳过空行
-                            console.log(`Skipping empty line at index: ${index}`);
                             return;
                         }
                         var columns = line.split(',');
@@ -171,18 +256,15 @@
                                     height: columns[3],
                                     longitude: longitude,
                                     latitude: latitude,
-                                    elevation: '' // 初始化elevation为空字符串
+                                    elevation: ''
                                 });
-                                console.log(`Parsed coordinate at line ${index + 1}: ${line}`);
-                            } else {
-                                console.warn(`Invalid coordinate at line ${index + 1}: ${line}`);
+                                validFeatures++;
                             }
-                        } else {
-                            console.warn(`Invalid line format at line ${index + 1}: ${line}`);
                         }
                     });
+                    document.getElementById('featureInfo').innerText = `上传了 ${validFeatures} 个特征点`;
                 };
-                reader.readAsText(file, 'UTF-8'); // 使用UTF-8编码读取文件
+                reader.readAsText(file, 'UTF-8');
             });
 
             // 监听绘制的完成事件
@@ -202,7 +284,7 @@
                     drawnItems.clearLayers();
 
                     var pointId = 1;
-                    var gridId = 1;  // 初始化网格编号
+                    var gridId = 1; 
                     var latStep = (northEast.lat - southWest.lat) / pointsPerGridSide;
                     var lngStep = (northEast.lng - southWest.lng) / pointsPerGridSide;
 
@@ -210,9 +292,8 @@
                         for (var j = 0; j < pointsPerGridSide; j++) {
                             var gridLat = southWest.lat + i * latStep;
                             var gridLng = southWest.lng + j * lngStep;
-                            var gridCode = gridId++;  // 使用数字编号
+                            var gridCode = gridId++;
 
-                            // 在每个网格内生成多个点
                             for (var m = 0; m < 3; m++) {
                                 for (var n = 0; n < 3; n++) {
                                     var lat = gridLat + (m + 0.5) * latStep / 3;
@@ -264,15 +345,9 @@
                 var originX = tiePoint.x;
                 var originY = tiePoint.y;
 
-                // 验证输入的纬度和经度
-                console.log('Input Lat:', lat, 'Input Lon:', lon);
-
                 // 计算像素坐标
                 var x = Math.floor((lon - originX) / pixelWidth);
                 var y = Math.floor((originY - lat) / Math.abs(pixelHeight));
-
-                // 打印计算结果
-                console.log('Calculated X:', x, 'Calculated Y:', y);
 
                 if (x < 0 || x >= width || y < 0 || y >= height) {
                     console.error('Coordinates out of bounds');
@@ -291,7 +366,7 @@
                 var i = Math.floor((latitude - southWest.lat) / latStep);
                 var j = Math.floor((longitude - southWest.lng) / lngStep);
 
-                return i * pointsPerGridSide + j + 1; // 网格编号从1开始
+                return i * pointsPerGridSide + j + 1; 
             }
 
             // 导出相机位置和生成点CSV的功能
@@ -301,7 +376,6 @@
                     return;
                 }
 
-                // 获取绘制的矩形区域的边界
                 var bounds = drawnItems.getLayers()[0].getBounds();
                 var southWest = bounds.getSouthWest();
                 var northEast = bounds.getNorthEast();
@@ -325,7 +399,7 @@
                     csvContent += `${generatedPoints.length + index + 1},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
                 });
 
-                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURI(csvContent); // 使用BOM解决中文编码问题
+                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
                 var link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
                 link.setAttribute("download", "coordinates.csv");
@@ -341,13 +415,13 @@
                     return;
                 }
 
-                var csvContent = "OBJECTID,Symbol,Name,Height,longitude,latitude,elevation\n"; // 保持原有格式，使用BOM解决中文编码问题
+                var csvContent = "OBJECTID,Symbol,Name,Height,longitude,latitude,elevation\n";
                 featureCoordinates.forEach(function(point) {
                     point.elevation = getElevationFromTiff(point.latitude, point.longitude);
                     csvContent += `${point.objectid},${point.symbol},${point.name},${point.height},${point.longitude},${point.latitude},${point.elevation}\n`;
                 });
 
-                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURI(csvContent); // 使用BOM解决中文编码问题
+                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
                 var link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
                 link.setAttribute("download", "feature_coordinates_with_elevation.csv");
