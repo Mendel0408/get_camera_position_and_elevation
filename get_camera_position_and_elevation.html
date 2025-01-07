@@ -148,14 +148,41 @@
                 reader.onload = function(e) {
                     var csv = e.target.result;
                     var lines = csv.split('\n');
-                    lines.forEach(function(line) {
-                        var [latitude, longitude] = line.split(',');
-                        if (latitude && longitude) {
-                            featureCoordinates.push({ latitude: parseFloat(latitude), longitude: parseFloat(longitude) });
+                    lines.forEach(function(line, index) {
+                        if (index === 0) {
+                            // 跳过标题行
+                            console.log(`Skipping header line: ${line}`);
+                            return;
+                        }
+                        if (line.trim() === '') {
+                            // 跳过空行
+                            console.log(`Skipping empty line at index: ${index}`);
+                            return;
+                        }
+                        var columns = line.split(',');
+                        if (columns.length >= 6) {
+                            var longitude = parseFloat(columns[4]);
+                            var latitude = parseFloat(columns[5]);
+                            if (!isNaN(latitude) && !isNaN(longitude)) {
+                                featureCoordinates.push({ 
+                                    objectid: columns[0],
+                                    symbol: columns[1],
+                                    name: columns[2],
+                                    height: columns[3],
+                                    longitude: longitude,
+                                    latitude: latitude,
+                                    elevation: '' // 初始化elevation为空字符串
+                                });
+                                console.log(`Parsed coordinate at line ${index + 1}: ${line}`);
+                            } else {
+                                console.warn(`Invalid coordinate at line ${index + 1}: ${line}`);
+                            }
+                        } else {
+                            console.warn(`Invalid line format at line ${index + 1}: ${line}`);
                         }
                     });
                 };
-                reader.readAsText(file);
+                reader.readAsText(file, 'UTF-8'); // 使用UTF-8编码读取文件
             });
 
             // 监听绘制的完成事件
@@ -237,12 +264,15 @@
                 var originX = tiePoint.x;
                 var originY = tiePoint.y;
 
+                // 验证输入的纬度和经度
+                console.log('Input Lat:', lat, 'Input Lon:', lon);
+
                 // 计算像素坐标
                 var x = Math.floor((lon - originX) / pixelWidth);
                 var y = Math.floor((originY - lat) / Math.abs(pixelHeight));
 
-                console.log('Lat:', lat, 'Lon:', lon);
-                console.log('X:', x, 'Y:', y);
+                // 打印计算结果
+                console.log('Calculated X:', x, 'Calculated Y:', y);
 
                 if (x < 0 || x >= width || y < 0 || y >= height) {
                     console.error('Coordinates out of bounds');
@@ -285,7 +315,7 @@
                     generatedPoints[i].elevation = getElevationFromTiff(generatedPoints[i].latitude, generatedPoints[i].longitude);
                 }
 
-                var csvContent = "data:text/csv;charset=utf-8,pointid,grid_code,longitude,latitude,elevation\n";
+                var csvContent = "pointid,grid_code,longitude,latitude,elevation\n";
 
                 generatedPoints.forEach(function(point) {
                     csvContent += `${point.pointid},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
@@ -295,7 +325,7 @@
                     csvContent += `${generatedPoints.length + index + 1},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
                 });
 
-                var encodedUri = encodeURI(csvContent);
+                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURI(csvContent); // 使用BOM解决中文编码问题
                 var link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
                 link.setAttribute("download", "coordinates.csv");
@@ -311,20 +341,16 @@
                     return;
                 }
 
-                for (let i = 0; i < featureCoordinates.length; i++) {
-                    featureCoordinates[i].elevation = getElevationFromTiff(featureCoordinates[i].latitude, featureCoordinates[i].longitude);
-                }
-
-                var csvContent = "data:text/csv;charset=utf-8,pointid,grid_code,longitude,latitude,elevation\n";
-                var pointId = 1;
+                var csvContent = "OBJECTID,Symbol,Name,Height,longitude,latitude,elevation\n"; // 保持原有格式，使用BOM解决中文编码问题
                 featureCoordinates.forEach(function(point) {
-                    csvContent += `${pointId++},Feature Point,${point.longitude},${point.latitude},${point.elevation}\n`;
+                    point.elevation = getElevationFromTiff(point.latitude, point.longitude);
+                    csvContent += `${point.objectid},${point.symbol},${point.name},${point.height},${point.longitude},${point.latitude},${point.elevation}\n`;
                 });
 
-                var encodedUri = encodeURI(csvContent);
+                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURI(csvContent); // 使用BOM解决中文编码问题
                 var link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "feature_coordinates.csv");
+                link.setAttribute("download", "feature_coordinates_with_elevation.csv");
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
