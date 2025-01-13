@@ -151,7 +151,7 @@
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            var cameraCoordinates = [];
+            var cameralocations = [];
             var featureCoordinates = [];
             var generatedPoints = [];
             var pointsPerGridSide = 10;
@@ -221,7 +221,7 @@
 
             // 监听文件输入的变化（相机位置）
             document.getElementById('cameraFileInput').addEventListener('change', function(event) {
-                cameraCoordinates = [];
+                cameralocations = [];
                 var files = event.target.files;
                 var validCoordinates = 0;
                 for (var i = 0; i < files.length; i++) {
@@ -251,7 +251,7 @@
                                         L.marker([latitude, longitude], { icon: cameraIcon }).addTo(map)
                                             .bindPopup(file.name);
 
-                                        cameraCoordinates.push({ latitude: latitude, longitude: longitude, filename: file.name });
+                                        cameralocations.push({ latitude: latitude, longitude: longitude, filename: file.name });
                                         validCoordinates++;
                                     }
                                     document.getElementById('cameraInfo').innerText = `上传了 ${files.length} 张照片，提取了 ${validCoordinates} 个坐标点`;
@@ -419,7 +419,7 @@
 
             // 导出相机位置和生成点CSV的功能
             document.getElementById('exportCameraLabel').addEventListener('click', function() {
-                if (cameraCoordinates.length === 0 && generatedPoints.length === 0) {
+                if (cameralocations.length === 0 && generatedPoints.length === 0) {
                     alert('No coordinates to export.');
                     return;
                 }
@@ -428,9 +428,9 @@
                 var southWest = bounds.getSouthWest();
                 var northEast = bounds.getNorthEast();
 
-                for (let i = 0; i < cameraCoordinates.length; i++) {
-                    cameraCoordinates[i].elevation = getElevationFromTiff(cameraCoordinates[i].latitude, cameraCoordinates[i].longitude);
-                    cameraCoordinates[i].grid_code = findGridCode(cameraCoordinates[i].latitude, cameraCoordinates[i].longitude, southWest, northEast, pointsPerGridSide);
+                for (let i = 0; i < cameralocations.length; i++) {
+                    cameralocations[i].elevation = getElevationFromTiff(cameralocations[i].latitude, cameralocations[i].longitude);
+                    cameralocations[i].grid_code = findGridCode(cameralocations[i].latitude, cameralocations[i].longitude, southWest, northEast, pointsPerGridSide);
                 }
 
                 for (let i = 0; i < generatedPoints.length; i++) {
@@ -443,14 +443,14 @@
                     csvContent += `${point.pointid},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
                 });
 
-                cameraCoordinates.forEach(function(point, index) {
+                cameralocations.forEach(function(point, index) {
                     csvContent += `${generatedPoints.length + index + 1},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
                 });
 
                 var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
                 var link = document.createElement("a");
                 link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "coordinates.csv");
+                link.setAttribute("download", "potential_camera_locations.csv");
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
