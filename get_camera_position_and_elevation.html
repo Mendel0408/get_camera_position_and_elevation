@@ -119,7 +119,7 @@
         <div class="section">
             <h2>相机位置</h2>
             <input type="file" id="cameraFileInput" multiple accept="image/*">
-            <label for="cameraFileInput">选择相机图片</label>
+            <label for="cameraFileInput">选择相机参考</label>
             <label for="exportCameraButton" id="exportCameraLabel">导出相机位置</label>
             <div class="info" id="cameraInfo"></div>
         </div>
@@ -417,66 +417,66 @@
                 return i * pointsPerGridSide + j + 1; 
             }
 
-            // 导出相机位置和生成点CSV的功能
-            document.getElementById('exportCameraLabel').addEventListener('click', function() {
-                if (cameralocations.length === 0 && generatedPoints.length === 0) {
-                    alert('No coordinates to export.');
-                    return;
-                }
+            // 导出相机位置和生成点CSV
+document.getElementById('exportCameraLabel').addEventListener('click', function() {
+    if (cameralocations.length === 0 && generatedPoints.length === 0) {
+        alert('No coordinates to export.');
+        return;
+    }
 
-                var bounds = drawnItems.getLayers()[0].getBounds();
-                var southWest = bounds.getSouthWest();
-                var northEast = bounds.getNorthEast();
+    var bounds = drawnItems.getLayers()[0].getBounds();
+    var southWest = bounds.getSouthWest();
+    var northEast = bounds.getNorthEast();
 
-                for (let i = 0; i < cameralocations.length; i++) {
-                    cameralocations[i].elevation = getElevationFromTiff(cameralocations[i].latitude, cameralocations[i].longitude);
-                    cameralocations[i].grid_code = findGridCode(cameralocations[i].latitude, cameralocations[i].longitude, southWest, northEast, pointsPerGridSide);
-                }
+    for (let i = 0; i < cameralocations.length; i++) {
+        cameralocations[i].elevation = getElevationFromTiff(cameralocations[i].latitude, cameralocations[i].longitude);
+        cameralocations[i].grid_code = findGridCode(cameralocations[i].latitude, cameralocations[i].longitude, southWest, northEast, pointsPerGridSide);
+    }
 
-                for (let i = 0; i < generatedPoints.length; i++) {
-                    generatedPoints[i].elevation = getElevationFromTiff(generatedPoints[i].latitude, generatedPoints[i].longitude);
-                }
+    for (let i = 0; i < generatedPoints.length; i++) {
+        generatedPoints[i].elevation = getElevationFromTiff(generatedPoints[i].latitude, generatedPoints[i].longitude);
+    }
 
-                var csvContent = "pointid,grid_code,longitude,latitude,elevation\n";
+    var csvContent = "Pointid,Grid_code,Longitude,Latitude,Elevation\n";
 
-                generatedPoints.forEach(function(point) {
-                    csvContent += `${point.pointid},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
-                });
+    generatedPoints.forEach(function(point) {
+        csvContent += `${point.pointid},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
+    });
 
-                cameralocations.forEach(function(point, index) {
-                    csvContent += `${generatedPoints.length + index + 1},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
-                });
+    cameralocations.forEach(function(point, index) {
+        csvContent += `${generatedPoints.length + index + 1},${point.grid_code},${point.longitude},${point.latitude},${point.elevation}\n`;
+    });
 
-                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
-                var link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "potential_camera_locations.csv");
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            });
+    var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
+    var link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "potential_camera_locations.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
 
-            // 导出特征点CSV的功能
-            document.getElementById('exportFeatureLabel').addEventListener('click', function() {
-                if (featureCoordinates.length === 0) {
-                    alert('No coordinates to export.');
-                    return;
-                }
+            // 导出特征点CSV
+document.getElementById('exportFeatureLabel').addEventListener('click', function() {
+    if (featureCoordinates.length === 0) {
+        alert('No coordinates to export.');
+        return;
+    }
 
-                var csvContent = "OBJECTID,Symbol,Name,Height,longitude,latitude,elevation\n";
-                featureCoordinates.forEach(function(point) {
-                    point.elevation = getElevationFromTiff(point.latitude, point.longitude);
-                    csvContent += `${point.objectid},${point.symbol},${point.name},${point.height},${point.longitude},${point.latitude},${point.elevation}\n`;
-                });
+    var csvContent = "Objectid,Symbol,Name,Height,Longitude,Latitude,Elevation\n";
+    featureCoordinates.forEach(function(point) {
+        point.elevation = getElevationFromTiff(point.latitude, point.longitude);
+        csvContent += `${point.objectid},${point.symbol},${point.name},${point.height},${point.longitude},${point.latitude},${point.elevation}\n`;
+    });
 
-                var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
-                var link = document.createElement("a");
-                link.setAttribute("href", encodedUri);
-                link.setAttribute("download", "feature_coordinates_with_elevation.csv");
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-            });
+    var encodedUri = 'data:text/csv;charset=utf-8,\uFEFF' + encodeURIComponent(csvContent);
+    var link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "feature_coordinates_with_elevation.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
         });
     </script>
     <input type="button" id="exportCameraButton" style="display: none;">
